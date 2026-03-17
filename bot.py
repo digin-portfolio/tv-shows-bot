@@ -2,6 +2,7 @@ import logging
 import os
 import sys
 import threading
+import asyncio
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # ------------------ LOGGING ------------------
@@ -32,7 +33,7 @@ except Exception as e:
     logger.error(f"DB failed: {e}")
     sys.exit(1)
 
-# ------------------ IMPORT HANDLERS ------------------
+# ------------------ TELEGRAM ------------------
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -53,7 +54,7 @@ from handlers.admin import (
 from handlers.force_sub import check_subscription_callback
 from handlers.auto_post import setup_auto_post
 
-# ------------------ KEEP-ALIVE SERVER ------------------
+# ------------------ KEEP ALIVE SERVER ------------------
 class PingHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -71,12 +72,8 @@ def start_web_server():
     server.serve_forever()
 
 
-# ------------------ MAIN BOT ------------------
-def main():
-    # Start web server in background
-    threading.Thread(target=start_web_server, daemon=True).start()
-
-    # Create bot
+# ------------------ BOT MAIN ------------------
+async def run_bot():
     app = Application.builder().token(BOT_TOKEN).build()
 
     # Handlers
@@ -92,15 +89,23 @@ def main():
     app.add_handler(CallbackQueryHandler(check_subscription_callback, pattern="^check_sub$"))
     app.add_handler(CallbackQueryHandler(deep_link_handler, pattern="^get_file:"))
 
-    # Auto post
     setup_auto_post(app)
 
     logger.info("Bot is running!")
 
-    # THIS is the correct way (no asyncio)
-    app.run_polling(drop_pending_updates=True)
+    # Manual lifecycle (THIS avoids all your errors)
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()
+
+    # keep alive forever
+    await asyncio.Event().wait()
 
 
 # ------------------ RUN ------------------
 if __name__ == "__main__":
-    main()
+    # Start web server thread
+    threading.Thread(target=start_web_server, daemon=True).start()
+
+    # Start bot loop
+    asyncio.run(run_bot())
