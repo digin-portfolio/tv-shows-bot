@@ -1,95 +1,65 @@
-"""
-handlers/start.py
-/start command + deep-link entry point (t.me/Bot?start=search_One_Piece_2023)
-"""
+import logging
+from telegram import Update
+from telegram.ext import Application, MessageHandler, filters, ContextTypes
+from database import add_file
+from config import AUTO_POST_CHANNEL_ID, ADMIN_IDS
+import re
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes
-from database import upsert_user, set_pending_search
-from handlers.force_sub import is_subscribed, build_join_keyboard
-from config import BOT_USERNAME
+logger = logging.getLogger(__name__)
 
+def _parse_filename(filename):
+    name = filename.rsplit(".", 1)[0]
+    name = name.replace(".", " ").replace("_", " ")
+    season, episode = 0, 0
+    se_match = re.search(r"[Ss](\d{1,2})[Ee](\d{1,2})", name)
+    if se_match:
+        season = int(se_match.group(1))
+        episode = int(se_match.group(2))
+        title = name[:se_match.start()].strip()
+    else:
+        title = re.sub(r"\b(720p|1080p|4K|WEBRip|BluRay|HDRip|x265|x264|HEVC|AAC|2CH)\b", "", name, flags=re.IGNORECASE).strip()
+    title = re.sub(r"\s+", " ", title).strip() or filename
+    return title, season, episode
 
-WELCOME_TEXT = """
-👋 *Welcome to Movie Bot!*
-
-I can help you find and download movies & series.
-
-🔍 *How to use:*
-Just type the name of any movie or series and I'll find it for you!
-
-_Example: `One Piece Season 2`_
-"""
-
-
-async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    upsert_user(user.id, user.username or "", user.first_name or "")
-
-    args = context.args  # Text after /start
-
-    # ── Deep-link: /start search_One_Piece_2023 ──────────────
-    if args and args[0].startswith("search_"):
-        query = args[0].replace("search_", "").replace("_", " ")
-
-        # Force-subscribe gate
-        if not await is_subscribed(context.bot, user.id):
-            set_pending_search(user.id, query)
-            await update.message.reply_text(
-                f"🔒 *Join our channels first to get your file!*\n\n"
-                f"🎬 *Requested:* `{query}`\n\n"
-                f"After joining, tap ✅ *I've Joined — Verify* below.",
-                parse_mode="Markdown",
-                reply_markup=build_join_keyboard()
-            )
-            return
-
-        # Subscribed → run the search directly
-        from handlers.search import perform_search
-        await perform_search(update, context, query_text=query, user_id=user.id)
+async def _auto_index(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.channel_post or update.message
+    if not msg:
         return
-
-    # ── Normal /start ─────────────────────────────────────────
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔍 Search Files", switch_inline_query_current_chat="")],
-        [InlineKeyboardButton("📢 Updates Channel", url=f"https://t.me/{BOT_USERNAME}")]
-    ])
-    await update.message.reply_text(
-        WELCOME_TEXT, parse_mode="Markdown", reply_markup=keyboard
-    )
-
-
-async def deep_link_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles 'get_file:<db_id>' callback buttons from search results."""
-    query = update.callback_query
-    await query.answer()
-
-    _, db_id = query.data.split(":")
-    from database import get_file_by_id
-    file_rec = get_file_by_id(int(db_id))
-
-    if not file_rec:
-        await query.message.reply_text("❌ File not found. It may have been removed.")
+    if msg.chat_id != AUTO_POST_CHANNEL_ID:
         return
-
-    size_str = f"{file_rec['size_mb']:.2f} MB" if file_rec.get("size_mb") else ""
-    caption = (
-        f"🎬 *{file_rec['title']}*\n"
-        f"📁 `{file_rec['filename']}`\n"
-        f"💾 {size_str}"
+    if msg.video:
+        tg_file = msg.video
+        file_type = "video"
+    elif msg.document:
+        tg_file = msg.document
+        file_type = "document"
+    else:
+        return
+    raw_name = tg_file.file_name or "Unknown"
+    size_mb = (tg_file.file_size or 0) / (1024 * 1024)
+    title, season, episode = _parse_filename(raw_name)
+    success = add_file(
+        title=title, filename=raw_name, file_id=tg_file.file_id,
+        file_type=file_type, size_mb=round(size_mb, 2),
+        season=season, episode=episode, added_by=0
     )
+    status = "✅ Indexed" if success else "⚠️ Duplicate"
+    logger.info(f"Auto-post: {status} → {raw_name}")
+    for admin_id in ADMIN_IDS:
+        try:
+            await context.bot.send_message(
+                admin_id,
+                f"🤖 *Auto-indexed*\n📁 `{raw_name}`\n🎬 {title}\n💾 {size_mb:.2f} MB\n{status}",
+                parse_mode="Markdown"
+            )
+        except Exception:
+            pass
 
-    try:
-        if file_rec.get("file_type") == "document":
-            await query.message.reply_document(
-                file_rec["file_id"], caption=caption, parse_mode="Markdown"
-            )
-        else:
-            await query.message.reply_video(
-                file_rec["file_id"], caption=caption, parse_mode="Markdown"
-            )
-    except Exception:
-        # Fallback for any file type
-        await query.message.reply_document(
-            file_rec["file_id"], caption=caption, parse_mode="Markdown"
+def setup_auto_post(app: Application):
+    app.add_handler(
+        MessageHandler(
+            (filters.VIDEO | filters.Document.ALL) & filters.ChatType.CHANNEL,
+            _auto_index
         )
+    )
+    logger.info("Auto-post listener registered.")
