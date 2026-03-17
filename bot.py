@@ -1,21 +1,10 @@
 import logging
 import os
 import sys
+import asyncio
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
-class Handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Bot is running!")
-    def log_message(self, *args):
-        pass
-
-def run_server():
-    HTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
-
-threading.Thread(target=run_server, daemon=True).start()
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
@@ -44,6 +33,20 @@ except Exception as e:
     logger.error(f"❌ Database init failed: {e}")
     sys.exit(1)
 
+# Keep Render happy with a dummy web server
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running!")
+    def log_message(self, *args):
+        pass
+
+def run_server():
+    HTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
+
+threading.Thread(target=run_server, daemon=True).start()
+
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     CallbackQueryHandler, filters
@@ -57,7 +60,7 @@ from handlers.admin import (
 from handlers.force_sub import check_subscription_callback
 from handlers.auto_post import setup_auto_post
 
-def main():
+async def main():
     logger.info("🚀 Starting bot...")
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start_handler))
@@ -71,7 +74,7 @@ def main():
     app.add_handler(CallbackQueryHandler(deep_link_handler, pattern="^get_file:"))
     setup_auto_post(app)
     logger.info("🤖 Bot is running...")
-    app.run_polling(drop_pending_updates=True)
+    await app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
