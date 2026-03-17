@@ -42,7 +42,8 @@ from telegram.ext import (
     filters
 )
 
-from handlers.start import start_handler, deep_link_handler
+# 🔥 UPDATED IMPORT
+from handlers.start import start_handler, try_again_handler
 from handlers.search import search_handler
 from handlers.admin import (
     admin_panel_handler,
@@ -76,36 +77,39 @@ def start_web_server():
 async def run_bot():
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # Handlers
+    # ------------------ COMMANDS ------------------
     app.add_handler(CommandHandler("start", start_handler))
     app.add_handler(CommandHandler("admin", admin_panel_handler))
     app.add_handler(CommandHandler("broadcast", broadcast_handler))
     app.add_handler(CommandHandler("stats", stats_handler))
     app.add_handler(CommandHandler("addfile", add_file_handler))
 
+    # ------------------ MESSAGES ------------------
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_handler))
     app.add_handler(MessageHandler(filters.Document.ALL | filters.VIDEO, handle_file_upload))
 
+    # ------------------ CALLBACKS ------------------
     app.add_handler(CallbackQueryHandler(check_subscription_callback, pattern="^check_sub$"))
-    app.add_handler(CallbackQueryHandler(deep_link_handler, pattern="^get_file:"))
 
+    # 🔥 NEW (IMPORTANT)
+    app.add_handler(CallbackQueryHandler(try_again_handler, pattern="^try_again$"))
+
+    # ❌ REMOVED old get_file handler (no longer needed)
+
+    # ------------------ AUTO POST ------------------
     setup_auto_post(app)
 
     logger.info("Bot is running!")
 
-    # Manual lifecycle (THIS avoids all your errors)
+    # Manual lifecycle
     await app.initialize()
     await app.start()
     await app.updater.start_polling()
 
-    # keep alive forever
     await asyncio.Event().wait()
 
 
 # ------------------ RUN ------------------
 if __name__ == "__main__":
-    # Start web server thread
     threading.Thread(target=start_web_server, daemon=True).start()
-
-    # Start bot loop
     asyncio.run(run_bot())
