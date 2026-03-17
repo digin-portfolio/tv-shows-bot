@@ -6,7 +6,7 @@ from handlers.force_sub import is_subscribed, build_join_keyboard
 MAX_SEARCH_RESULTS = 8
 
 # ⚠️ CHANGE THIS (without @)
-BOT_USERNAME = "YOUR_BOT_USERNAME"
+BOT_USERNAME = "TELEVISION_SHOWSBOT"
 
 
 # ------------------ BUILD BUTTONS ------------------
