@@ -4,8 +4,8 @@ from telegram.error import TelegramError
 import os
 
 FORCE_SUB_CHANNELS = [
-    {"id": "@mychannel1", "name": "Update Channel 1", "invite": "https://t.me/+tOUK3raFwCQwMjE1"},
-    {"id": "@mychannel2", "name": "Update Channel 2", "invite": "https://t.me/+QOuWswFJbqBiOTZl"},
+    {"id": -1003779826671, "name": "Update Channel 1", "invite": "https://t.me/+tOUK3raFwCQwMjE1"},
+    {"id": -1003627970554, "name": "Update Channel 2", "invite": "https://t.me/+QOuWswFJbqBiOTZl"},
 ]
 
 async def is_subscribed(bot, user_id: int) -> bool:
