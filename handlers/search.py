@@ -5,24 +5,41 @@ from handlers.force_sub import is_subscribed, build_join_keyboard
 
 MAX_SEARCH_RESULTS = 8
 
+# ⚠️ CHANGE THIS (without @)
+BOT_USERNAME = "YOUR_BOT_USERNAME"
+
+
+# ------------------ BUILD BUTTONS ------------------
 def _build_results_keyboard(results):
     buttons = []
+
     for r in results:
         ep_tag = ""
         if r.get("season") and r.get("episode"):
             ep_tag = f" S{r['season']:02d}E{r['episode']:02d}"
+
         size_tag = f" [{r['size_mb']:.0f}MB]" if r.get("size_mb") else ""
         label = f"📥 {r['title']}{ep_tag}{size_tag}"
+
         db_id = r.get("id")
-        buttons.append([InlineKeyboardButton(label, callback_data=f"get_file:{db_id}")])
+
+        # 🔥 DEEP LINK BUTTON (IMPORTANT CHANGE)
+        buttons.append([
+            InlineKeyboardButton(
+                label,
+                url=f"https://t.me/{BOT_USERNAME}?start=file_{db_id}"
+            )
+        ])
+
     return InlineKeyboardMarkup(buttons)
 
 
+# ------------------ SEARCH HANDLER ------------------
 async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    message = update.effective_message  # ✅ safer
+    message = update.effective_message
 
-    # 🚨 Critical safety check
+    # Safety check
     if not message or not message.text:
         return
 
@@ -31,8 +48,10 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not text:
         return
 
+    # 🔒 Check subscription
     if not await is_subscribed(context.bot, user.id):
         set_pending_search(user.id, text)
+
         await message.reply_text(
             "🔒 *You must join our channels first!*\n\nAfter joining, tap ✅ *I've Joined — Verify*.",
             parse_mode="Markdown",
@@ -40,11 +59,13 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    # ✅ Perform search
     await perform_search(update, context, query_text=text, user_id=user.id)
 
 
+# ------------------ PERFORM SEARCH ------------------
 async def perform_search(update, context, query_text, user_id):
-    msg_obj = update.effective_message  # ✅ simplified
+    msg_obj = update.effective_message
 
     results = search_files(query_text, limit=MAX_SEARCH_RESULTS)
 
