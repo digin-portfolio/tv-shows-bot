@@ -58,11 +58,3 @@ def main():
     setup_auto_post(app)
     logger.info("Bot is running...")
     app.run_polling(drop_pending_updates=True)
-
-if __name__ == "__main__":
-    main()
-```
-
-Also make sure `runtime.txt` in your repo root contains ONLY:
-```
-python-3.11.0
