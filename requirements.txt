@@ -1,0 +1,144 @@
+# 🎬 Telegram Movie Bot
+
+A full-featured Telegram file-sharing bot with:
+- 🔍 **Search by name** — users type a title, bot returns matching files
+- 🔒 **Force Subscribe Gate** — users must join your channels first
+- 📡 **Auto-post indexing** — bot auto-indexes files posted to your channel
+- 🛠 **Admin Panel** — upload files, broadcast messages, view stats
+
+---
+
+## 📁 File Structure
+
+```
+movie_bot/
+├── bot.py               ← Entry point
+├── config.py            ← All your settings
+├── database.py          ← SQLite / MongoDB storage
+├── requirements.txt
+└── handlers/
+    ├── start.py         ← /start + deep-link
+    ├── search.py        ← Text search
+    ├── force_sub.py     ← Subscription gate
+    ├── admin.py         ← Admin commands + file upload
+    └── auto_post.py     ← Channel listener
+```
+
+---
+
+## ⚙️ Setup (Step-by-Step)
+
+### 1. Install Python 3.11+
+Download from https://python.org
+
+### 2. Create a Telegram Bot
+1. Open Telegram → search **@BotFather**
+2. Send `/newbot` → follow prompts
+3. Copy the **Bot Token**
+
+### 3. Get your Telegram User ID
+1. Message **@userinfobot**
+2. Copy the numeric ID shown
+
+### 4. Create Channels
+- **Update Channel 1** (force-sub) — make bot admin
+- **Update Channel 2** (force-sub) — make bot admin
+- **Storage Channel** (private) — make bot admin — upload files here
+- **Source Channel** (optional, for auto-post) — make bot admin
+
+### 5. Get Channel IDs
+Forward any message from your channel to **@username_to_id_bot**
+It returns a negative number like `-1001234567890`
+
+### 6. Edit config.py
+
+```python
+BOT_TOKEN = "1234567890:ABCdef..."       # From BotFather
+ADMIN_IDS = [987654321]                  # Your Telegram user ID
+FORCE_SUB_CHANNELS = [
+    {"id": "@your_channel_1", "name": "Movies Channel", "invite": "https://t.me/your_channel_1"},
+    {"id": "@your_channel_2", "name": "Series Channel", "invite": "https://t.me/your_channel_2"},
+]
+STORAGE_CHANNEL_ID  = -1001234567890     # Your private storage channel
+AUTO_POST_CHANNEL_ID = -1009876543210    # Channel bot should watch
+BOT_USERNAME = "YourBotName"             # Without @
+```
+
+### 7. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 8. Run the bot
+
+```bash
+python bot.py
+```
+
+---
+
+## 🤖 How to Add Files
+
+### Method A — Forward to Bot (easiest)
+1. Upload the video/document to your storage channel
+2. Forward that message to your bot
+3. Bot auto-reads filename, indexes it ✅
+
+### Method B — Auto-post channel
+1. Upload files to `AUTO_POST_CHANNEL_ID`
+2. Bot indexes them automatically — no action needed ✅
+
+### Method C — Manual command
+```
+/addfile <file_id> Movie Title Here
+```
+
+---
+
+## 🔗 Deep-Link URLs (for posting in channels)
+
+Generate a clickable link for any title:
+```
+https://t.me/YourBotName?start=search_One_Piece_2023
+```
+Replace spaces with underscores in the search term.
+
+Post this link in your channel alongside the poster image — users tap it and get the file instantly (after subscribing).
+
+---
+
+## 🛠 Admin Commands
+
+| Command | Description |
+|---|---|
+| `/admin` | Open admin panel |
+| `/stats` | Show user & file counts |
+| `/addfile` | Manual file add mode |
+| `/broadcast <msg>` | Send message to all users |
+
+---
+
+## ☁️ Hosting (Free options)
+
+| Platform | Notes |
+|---|---|
+| **Railway.app** | Free tier, easy deploy |
+| **Render.com** | Free web service |
+| **Oracle Cloud** | Always-free VPS |
+| **VPS (DigitalOcean)** | $4/month, most reliable |
+
+### Deploy on Railway
+1. Push code to GitHub
+2. New project → Deploy from GitHub
+3. Add `BOT_TOKEN` as environment variable
+4. Done ✅
+
+---
+
+## 📝 Notes
+
+- SQLite database (`moviebot.db`) is created automatically on first run
+- To use MongoDB: set `USE_MONGO = True` and add `MONGO_URI` in config.py
+- Bot must be **admin** in all channels (force-sub + storage + auto-post)
+- For large deployments (10k+ users) use MongoDB and a VPS
