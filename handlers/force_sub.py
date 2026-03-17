@@ -1,76 +1,44 @@
-"""
-handlers/search.py
-Handles free-text search messages and returns paginated file buttons.
-"""
-
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from database import search_files, set_pending_search
-from handlers.force_sub import is_subscribed, build_join_keyboard
-from config import MAX_SEARCH_RESULTS
+from telegram.error import TelegramError
+import os
 
+FORCE_SUB_CHANNELS = [
+    {"id": "@mychannel1", "name": "Update Channel 1", "invite": "https://t.me/+tOUK3raFwCQwMjE1"},
+    {"id": "@mychannel2", "name": "Update Channel 2", "invite": "https://t.me/+QOuWswFJbqBiOTZl"},
+]
 
-def _build_results_keyboard(results: list) -> InlineKeyboardMarkup:
-    """One button per result: shows size + truncated filename."""
-    buttons = []
-    for r in results:
-        ep_tag = ""
-        if r.get("season") and r.get("episode"):
-            ep_tag = f" S{r['season']:02d}E{r['episode']:02d}"
-        size_tag = f" [{r['size_mb']:.0f}MB]" if r.get("size_mb") else ""
-        label = f"📥 {r['title']}{ep_tag}{size_tag}"
-        db_id = r.get("id") or str(r.get("_id"))
-        buttons.append([InlineKeyboardButton(label, callback_data=f"get_file:{db_id}")])
+async def is_subscribed(bot, user_id: int) -> bool:
+    for ch in FORCE_SUB_CHANNELS:
+        try:
+            member = await bot.get_chat_member(ch["id"], user_id)
+            if member.status in ("left", "kicked", "banned"):
+                return False
+        except TelegramError:
+            return False
+    return True
+
+def build_join_keyboard() -> InlineKeyboardMarkup:
+    buttons = [
+        [InlineKeyboardButton(f"📢 {ch['name']}", url=ch["invite"])]
+        for ch in FORCE_SUB_CHANNELS
+    ]
+    buttons.append([InlineKeyboardButton("✅ I've Joined — Verify", callback_data="check_sub")])
     return InlineKeyboardMarkup(buttons)
 
-
-async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Entry point for plain-text messages (the search query)."""
-    user = update.effective_user
-    text = update.message.text.strip()
-
-    if not text:
-        return
-
-    # Force-subscribe gate
-    if not await is_subscribed(context.bot, user.id):
-        set_pending_search(user.id, text)
-        await update.message.reply_text(
-            "🔒 *You must join our channels first!*\n\n"
-            "After joining, tap ✅ *I've Joined — Verify*.",
-            parse_mode="Markdown",
-            reply_markup=build_join_keyboard()
-        )
-        return
-
-    await perform_search(update, context, query_text=text, user_id=user.id)
-
-
-async def perform_search(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    query_text: str,
-    user_id: int
-):
-    """Run DB search and send results (used by both text handler and deep-link)."""
-    msg_obj = update.message or (update.callback_query.message if update.callback_query else None)
-
-    results = search_files(query_text, limit=MAX_SEARCH_RESULTS)
-
-    if not results:
-        await msg_obj.reply_text(
-            f"❌ *No results found for:* `{query_text}`\n\n"
-            "Try a different spelling or shorter keyword.",
+async def check_subscription_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+    if await is_subscribed(context.bot, user_id):
+        await query.message.edit_text(
+            "✅ *Verified! Now send me a movie or series name to search.*",
             parse_mode="Markdown"
         )
-        return
-
-    header = (
-        f"🎯 *Found {len(results)} result(s) for:* `{query_text}`\n"
-        f"👇 Tap a button below to get the file:"
-    )
-    await msg_obj.reply_text(
-        header,
-        parse_mode="Markdown",
-        reply_markup=_build_results_keyboard(results)
-    )
+        from database import pop_pending_search
+        from handlers.search import perform_search
+        pending = pop_pending_search(user_id)
+        if pending:
+            await perform_search(update, context, query_text=pending, user_id=user_id)
+    else:
+        await query.answer("❌ You haven't joined all channels yet!", show_alert=True)
