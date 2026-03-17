@@ -2,7 +2,6 @@ import logging
 import os
 import sys
 import threading
-import asyncio
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # ------------------ LOGGING ------------------
@@ -72,8 +71,8 @@ def start_web_server():
     server.serve_forever()
 
 
-# ------------------ BOT ------------------
-async def main():
+# ------------------ MAIN BOT ------------------
+def main():
     # Start web server in background
     threading.Thread(target=start_web_server, daemon=True).start()
 
@@ -98,10 +97,10 @@ async def main():
 
     logger.info("Bot is running!")
 
-    # IMPORTANT: await here (fixes your error)
-    await app.run_polling(drop_pending_updates=True)
+    # THIS is the correct way (no asyncio)
+    app.run_polling(drop_pending_updates=True)
 
 
 # ------------------ RUN ------------------
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
