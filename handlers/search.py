@@ -23,7 +23,7 @@ def _build_results_keyboard(results):
 
         db_id = r.get("id")
 
-        # 🔥 DEEP LINK BUTTON (IMPORTANT CHANGE)
+        # 🔥 DEEP LINK BUTTON
         buttons.append([
             InlineKeyboardButton(
                 label,
@@ -34,16 +34,31 @@ def _build_results_keyboard(results):
     return InlineKeyboardMarkup(buttons)
 
 
+# ------------------ CLEAN TEXT ------------------
+def clean_query(text: str) -> str:
+    text = text.strip()
+
+    # remove bot mention like "@BOT_NAME query"
+    if text.startswith("@"):
+        parts = text.split(" ", 1)
+        if len(parts) > 1:
+            text = parts[1]
+        else:
+            return ""
+
+    return text.strip()
+
+
 # ------------------ SEARCH HANDLER ------------------
 async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     message = update.effective_message
 
-    # Safety check
     if not message or not message.text:
         return
 
-    text = message.text.strip()
+    # 🔥 CLEAN QUERY (IMPORTANT FIX)
+    text = clean_query(message.text)
 
     if not text:
         return
