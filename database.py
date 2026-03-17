@@ -157,3 +157,12 @@ def pop_pending_search(user_id):
     cur.close()
     conn.close()
     return row[0] if row else None
+# ------------------ PENDING FILE STORAGE ------------------
+
+_pending_files = {}
+
+def set_pending_file(user_id, file_id):
+    _pending_files[user_id] = file_id
+
+def get_pending_file(user_id):
+    return _pending_files.get(user_id)
