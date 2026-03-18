@@ -111,8 +111,7 @@ async def run_bot():
     await app.initialize()
     await app.bot.delete_webhook(drop_pending_updates=True)
 
-    await app.start()
-    await app.updater.start_polling()
+    await app.run_polling(drop_pending_updates=True)
 
     await asyncio.Event().wait()
 
