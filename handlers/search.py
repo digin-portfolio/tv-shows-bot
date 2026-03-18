@@ -4,12 +4,28 @@ from database import search_files, set_pending_search
 from handlers.force_sub import is_subscribed, build_join_keyboard
 
 MAX_SEARCH_RESULTS = 8
-
-# ⚠️ CHANGE THIS (without @)
-BOT_USERNAME = "TELEVISION_SHOWSBOT"
+BOT_USERNAME = "TELEVISION_SHOWSBOT"  # بدون @
 
 
-# ------------------ BUILD BUTTONS ------------------
+# ------------------ NORMALIZE ------------------
+def clean_query(text: str) -> str:
+    text = text.strip().lower()
+
+    # remove @botusername if used in group
+    if text.startswith("@"):
+        parts = text.split(" ", 1)
+        if len(parts) > 1:
+            text = parts[1]
+        else:
+            return ""
+
+    # replace separators
+    text = text.replace(".", " ").replace("_", " ").replace("-", " ")
+
+    return text.strip()
+
+
+# ------------------ BUTTONS ------------------
 def _build_results_keyboard(results):
     buttons = []
 
@@ -23,7 +39,6 @@ def _build_results_keyboard(results):
 
         db_id = r.get("id")
 
-        # 🔥 DEEP LINK BUTTON
         buttons.append([
             InlineKeyboardButton(
                 label,
@@ -34,21 +49,6 @@ def _build_results_keyboard(results):
     return InlineKeyboardMarkup(buttons)
 
 
-# ------------------ CLEAN TEXT ------------------
-def clean_query(text: str) -> str:
-    text = text.strip()
-
-    # remove bot mention like "@BOT_NAME query"
-    if text.startswith("@"):
-        parts = text.split(" ", 1)
-        if len(parts) > 1:
-            text = parts[1]
-        else:
-            return ""
-
-    return text.strip()
-
-
 # ------------------ SEARCH HANDLER ------------------
 async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -57,13 +57,12 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not message or not message.text:
         return
 
-    # 🔥 CLEAN QUERY (IMPORTANT FIX)
     text = clean_query(message.text)
 
     if not text:
         return
 
-    # 🔒 Check subscription
+    # 🔒 subscription check
     if not await is_subscribed(context.bot, user.id):
         set_pending_search(user.id, text)
 
@@ -74,24 +73,23 @@ async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # ✅ Perform search
-    await perform_search(update, context, query_text=text, user_id=user.id)
+    await perform_search(update, context, text, user.id)
 
 
 # ------------------ PERFORM SEARCH ------------------
 async def perform_search(update, context, query_text, user_id):
-    msg_obj = update.effective_message
+    msg = update.effective_message
 
     results = search_files(query_text, limit=MAX_SEARCH_RESULTS)
 
     if not results:
-        await msg_obj.reply_text(
+        await msg.reply_text(
             f"❌ *No results for:* `{query_text}`\n\nTry a different keyword.",
             parse_mode="Markdown"
         )
         return
 
-    await msg_obj.reply_text(
+    await msg.reply_text(
         f"🎯 *Found {len(results)} result(s) for:* `{query_text}`\n👇 Tap to get the file:",
         parse_mode="Markdown",
         reply_markup=_build_results_keyboard(results)
