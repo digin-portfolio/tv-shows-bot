@@ -42,7 +42,8 @@ from telegram.ext import (
     filters
 )
 
-from handlers.start import start_handler, try_again_handler
+# ✅ FIXED IMPORT (REMOVED try_again_handler)
+from handlers.start import start_handler
 from handlers.search import search_handler
 from handlers.admin import (
     admin_panel_handler,
@@ -83,10 +84,10 @@ async def run_bot():
     app.add_handler(CommandHandler("stats", stats_handler))
     app.add_handler(CommandHandler("addfile", add_file_handler))
 
-    # ------------------ MESSAGES ------------------
+    # ------------------ SEARCH ------------------
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_handler))
 
-    # 🔥 FIXED: CHANNEL FILE HANDLER
+    # ------------------ FILE INDEXING (CHANNEL ONLY) ------------------
     app.add_handler(
         MessageHandler(
             (filters.Document.ALL | filters.VIDEO) & filters.ChatType.CHANNEL,
@@ -94,23 +95,25 @@ async def run_bot():
         )
     )
 
-    # ------------------ CALLBACKS ------------------
-    app.add_handler(CallbackQueryHandler(check_subscription_callback, pattern="^check_sub$"))
-    app.add_handler(CallbackQueryHandler(try_again_handler, pattern="^try_again$"))
+    # ------------------ VERIFY ------------------
+    app.add_handler(
+        CallbackQueryHandler(check_subscription_callback, pattern="^check_sub$")
+    )
+
+    # ❌ REMOVED try_again_handler (NOT NEEDED)
 
     # ------------------ AUTO POST ------------------
     setup_auto_post(app)
 
     logger.info("Bot is running!")
 
-    # ------------------ FIX WEBHOOK ISSUE ------------------
+    # ------------------ START BOT ------------------
     await app.initialize()
     await app.bot.delete_webhook(drop_pending_updates=True)
 
     await app.start()
     await app.updater.start_polling()
 
-    # keep alive forever
     await asyncio.Event().wait()
 
 
