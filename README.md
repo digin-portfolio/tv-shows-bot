@@ -1,196 +1,87 @@
-"""
-database.py — PostgreSQL storage layer (Railway free DB)
-Reads DATABASE_URL environment variable set automatically by Railway.
-"""
+<h1 align="center">📺 TV File Search Bot</h1>
 
-import os
-import psycopg2
-import psycopg2.extras
-from datetime import datetime
+<p align="center">
+  A Telegram bot for indexing and searching TV show & movie files.
+  Built with Python + PostgreSQL, hosted on Railway.
+</p>
 
-# Railway sets this automatically when you add a Postgres plugin
-DATABASE_URL = os.environ.get("DATABASE_URL", "")
+---
 
+## 👤 Developer
 
-def _get_conn():
-    conn = psycopg2.connect(DATABASE_URL)
-    return conn
+[![Contact Developer](https://img.shields.io/static/v1?label=Contact+Developer&message=On+Telegram&color=critical)](https://t.me/thediiii)
 
+---
 
-def init_db():
-    """Create tables on first run (safe to call multiple times)."""
-    conn = _get_conn()
-    cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS files (
-            id          SERIAL PRIMARY KEY,
-            title       TEXT NOT NULL,
-            filename    TEXT NOT NULL,
-            file_id     TEXT NOT NULL UNIQUE,
-            file_type   TEXT DEFAULT 'video',
-            size_mb     REAL DEFAULT 0,
-            season      INTEGER DEFAULT 0,
-            episode     INTEGER DEFAULT 0,
-            added_by    BIGINT DEFAULT 0,
-            added_at    TIMESTAMP DEFAULT NOW()
-        );
+## 🌟 Features
 
-        CREATE TABLE IF NOT EXISTS users (
-            user_id     BIGINT PRIMARY KEY,
-            username    TEXT DEFAULT '',
-            first_name  TEXT DEFAULT '',
-            joined_at   TIMESTAMP DEFAULT NOW(),
-            last_active TIMESTAMP DEFAULT NOW()
-        );
+- ✅ File indexing with title, season & episode tracking
+- ✅ Fast file search with fuzzy matching
+- ✅ PostgreSQL database (Railway hosted)
+- ✅ User tracking & last active logging
+- ✅ Admin broadcast to all users
+- ✅ Deep-link search flow
+- ✅ File stats & user stats
+- ✅ Add / delete files from DB
+- ✅ Pending search queue system
 
-        CREATE TABLE IF NOT EXISTS pending_search (
-            user_id     BIGINT PRIMARY KEY,
-            query       TEXT,
-            created_at  TIMESTAMP DEFAULT NOW()
-        );
-    """)
-    conn.commit()
-    cur.close()
-    conn.close()
+---
 
+## 🗄️ Database Structure
 
-# ── File operations ───────────────────────────────────────
+| Table | Purpose |
+|-------|---------|
+| `files` | Stores indexed files with title, season, episode, file_id |
+| `users` | Tracks all bot users and activity |
+| `pending_search` | Handles deep-link search queue |
 
-def add_file(title: str, filename: str, file_id: str,
-             file_type: str = "video", size_mb: float = 0,
-             season: int = 0, episode: int = 0, added_by: int = 0) -> bool:
-    conn = _get_conn()
-    cur = conn.cursor()
-    try:
-        cur.execute("""
-            INSERT INTO files (title, filename, file_id, file_type, size_mb, season, episode, added_by)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (file_id) DO UPDATE SET
-                title=EXCLUDED.title,
-                filename=EXCLUDED.filename,
-                size_mb=EXCLUDED.size_mb,
-                season=EXCLUDED.season,
-                episode=EXCLUDED.episode
-        """, (title, filename, file_id, file_type, size_mb, season, episode, added_by))
-        conn.commit()
-        return True
-    except Exception:
-        conn.rollback()
-        return False
-    finally:
-        cur.close()
-        conn.close()
+---
 
+## ⚙️ Setup
 
-def search_files(query: str, limit: int = 8) -> list:
-    conn = _get_conn()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    like = f"%{query.strip().lower()}%"
-    cur.execute("""
-        SELECT * FROM files
-        WHERE LOWER(title) LIKE %s OR LOWER(filename) LIKE %s
-        ORDER BY season, episode
-        LIMIT %s
-    """, (like, like, limit))
-    rows = cur.fetchall()
-    cur.close()
-    conn.close()
-    return [dict(r) for r in rows]
+### 1. Clone the repo
+```bash
+git clone https://github.com/digin-portfolio/YOUR_REPO_NAME
+cd YOUR_REPO_NAME
+```
 
+### 2. Install dependencies
+```bash
+pip install psycopg2-binary python-telegram-bot
+```
 
-def get_file_by_id(file_db_id: int) -> dict | None:
-    conn = _get_conn()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("SELECT * FROM files WHERE id=%s", (file_db_id,))
-    row = cur.fetchone()
-    cur.close()
-    conn.close()
-    return dict(row) if row else None
+### 3. Set environment variables
+```bash
+DATABASE_URL=your_postgresql_url
+BOT_TOKEN=your_telegram_bot_token
+```
 
+### 4. Initialize the database
+```python
+from database import init_db
+init_db()
+```
 
-def get_all_files() -> list:
-    conn = _get_conn()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("SELECT * FROM files ORDER BY added_at DESC")
-    rows = cur.fetchall()
-    cur.close()
-    conn.close()
-    return [dict(r) for r in rows]
+### 5. Deploy on Railway
+- Add a **PostgreSQL** plugin on Railway
+- Railway sets `DATABASE_URL` automatically
+- Deploy and you're live ✅
 
+---
 
-def delete_file(file_db_id: int) -> bool:
-    conn = _get_conn()
-    cur = conn.cursor()
-    cur.execute("DELETE FROM files WHERE id=%s", (file_db_id,))
-    conn.commit()
-    cur.close()
-    conn.close()
-    return True
+## 📬 Contact
 
+[![Telegram](https://img.shields.io/badge/Telegram-@thediiii-blue?style=flat&logo=telegram)](https://t.me/thediiii)
 
-# ── User operations ───────────────────────────────────────
+---
 
-def upsert_user(user_id: int, username: str = "", first_name: str = ""):
-    conn = _get_conn()
-    cur = conn.cursor()
-    cur.execute("""
-        INSERT INTO users (user_id, username, first_name)
-        VALUES (%s, %s, %s)
-        ON CONFLICT (user_id) DO UPDATE SET
-            username=EXCLUDED.username,
-            first_name=EXCLUDED.first_name,
-            last_active=NOW()
-    """, (user_id, username or "", first_name or ""))
-    conn.commit()
-    cur.close()
-    conn.close()
+## ⚠️ Disclaimer
 
+For educational purposes only.  
+Use responsibly and respect platform rules.
 
-def get_all_user_ids() -> list[int]:
-    conn = _get_conn()
-    cur = conn.cursor()
-    cur.execute("SELECT user_id FROM users")
-    rows = cur.fetchall()
-    cur.close()
-    conn.close()
-    return [r[0] for r in rows]
+---
 
+## 📜 License
 
-def get_stats() -> dict:
-    conn = _get_conn()
-    cur = conn.cursor()
-    cur.execute("SELECT COUNT(*) FROM files")
-    files = cur.fetchone()[0]
-    cur.execute("SELECT COUNT(*) FROM users")
-    users = cur.fetchone()[0]
-    cur.close()
-    conn.close()
-    return {"total_files": files, "total_users": users}
-
-
-# ── Pending search (deep-link flow) ──────────────────────
-
-def set_pending_search(user_id: int, query: str):
-    conn = _get_conn()
-    cur = conn.cursor()
-    cur.execute("""
-        INSERT INTO pending_search (user_id, query)
-        VALUES (%s, %s)
-        ON CONFLICT (user_id) DO UPDATE SET query=EXCLUDED.query, created_at=NOW()
-    """, (user_id, query))
-    conn.commit()
-    cur.close()
-    conn.close()
-
-
-def pop_pending_search(user_id: int) -> str | None:
-    conn = _get_conn()
-    cur = conn.cursor()
-    cur.execute("SELECT query FROM pending_search WHERE user_id=%s", (user_id,))
-    row = cur.fetchone()
-    if row:
-        cur.execute("DELETE FROM pending_search WHERE user_id=%s", (user_id,))
-        conn.commit()
-    cur.close()
-    conn.close()
-    return row[0] if row else None
+MIT License
